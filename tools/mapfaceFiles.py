@@ -1,18 +1,12 @@
 #!/usr/bin/env python3
 #!/usr/bin/python3
 
+import helper_utils as util
+
 import face_recognition
 import numpy as np
 import cv2
 import os
-
-def largestFaceIndex(face_locations):
-    area = []
-
-    for top, right, bottom, left in face_locations:
-        area.append( (bottom - top) * (right - left) )
-    
-    return area.index(max(area))
 
 # Assumes subfolders with names of subjects
 def getCropFaces(folderName="input_images", outName="known_faces"):
@@ -30,7 +24,7 @@ def getCropFaces(folderName="input_images", outName="known_faces"):
 
                     face_locations = face_recognition.face_locations(frame)
                     if len(face_locations):
-                        index = largestFaceIndex(face_locations)
+                        index, _ = util.largestFaceIndex(face_locations)
                         
                         # print("{} faces found".format(len(face_locations)))
                         

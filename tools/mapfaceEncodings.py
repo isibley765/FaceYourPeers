@@ -1,111 +1,95 @@
 #!/usr/bin/env python3
 #!/usr/bin/python3
 
+import tools.helper_utils as util
+
 import face_recognition as fr
 import numpy as np
 import json
 import cv2
 import os
 
-# Use the area of the bounding box as the "largest face" finder
-def largestFaceIndex(face):
-    face_locations = fr.face_locations(face)
-    area = []
-
-    for top, right, bottom, left in face_locations:
-        area.append( (bottom - top) * (right - left) )
-    
-    return area.index(max(area))
-
 # Assumes subfolders with names of subjects
-def getFaceEncodings(folderName="input_images"):
+def preloadedOrFreshEncodings(folderName="known_faces"):
     res = {}
+    new_encodings = False
+
+    # If the folder doesn't exist yet, make it
+    if not os.path.isdir(folderName):
+        os.makedirs(folderName)
+        print("Given folder {}/ didn't exist -- creating it for you to fill".format(folderName))
 
     for person in os.listdir(folderName):
         curpath = os.path.join(folderName, person)
         if os.path.isdir(curpath):
+            print("Loading {}'s face-recognition template...".format(person))
             res[person] = []    # Encodings for each person will be saved in a list
 
-            # Ignore the self generated .npz filess
-            names = []
-            for image in os.listdir(curpath):
-                if not image.endswith(".npz"):
-                    names.append(fr.load_image_file(os.path.join(curpath, image)))
+            # Check for self generated .npz files
+            npz_present = False
+            persons_files = os.listdir(curpath)
+            for filename in persons_files:
+                if filename.endswith(".npz"):
+                    npz_present = True
 
-            res[person].extend(turnImagesToFeats(names))
+            if npz_present:
+                res[person] = list(readFaceEncodings(curpath, person))
+            else:
+                res[person].extend(getFaceEncodings(curpath, persons_files))
+                writeOneFaceEncoding(res, curpath, person)
 
         else:
             print("{} isn't a directory...".format(person))
     
     return res
 
-def writeFaceEncodings(encoded, outName="known_faces"):
-    for person in encoded:
-        encodefolder = os.path.join(outName, person)
-        encodefile = os.path.join(encodefolder, "encodings_"+person+"")
+# Assumes subfolders with names of subjects
+def getFaceEncodings(curpath, faces_list):
+    # Ignore the self generated .npz filess
+    names = []
+    for image in faces_list:
+        if not image.endswith(".npz"):
+            imagepath = os.path.join(curpath, image)
+            try:
+                names.append(fr.load_image_file(imagepath))
+            except:
+                print("Failed to load -- are you sure this is an image?\n    {}".format(imagepath))
 
-        if not os.path.isdir(encodefolder):
-            os.makedirs(encodefolder)
-        
-        np.savez_compressed(encodefile, encoded[person])
+    return util.turnAllImagesToFeats(names)
 
 # Assumes a directory with each sub directory being the name of the candidate
-def readFaceEncodings(encode_path="known_faces"):
-    res = {}
+def readFaceEncodings(facepath, person):
+    encodefile = os.path.join(facepath, "encodings_"+person+".npz")
+    encoding = None
 
-    for person in os.listdir(encode_path):
-        encodefile = os.path.join(encode_path, person, "encodings_"+person+".npz")
-        res[person] = []
+    if os.path.isfile(encodefile):
+        npzclass = np.load(encodefile)
 
-        if os.path.isfile(encodefile):
-            npzclass = np.load(encodefile)
-
-            for fn in npzclass.files:
-                res[person].extend(npzclass[fn])
+        for fn in npzclass.files:
+            encoding = npzclass[fn]
+    else:
+        print("No encoded file detected at {}".format(facepath))
     
-    return res
+    return encoding
 
-# Compares a list of features against a list of known vectors
-def compareListToKnown(inlist, compknown=None, encode_path="known_faces"):
-    if compknown is None:
-        compknown = readFaceEncodings(encode_path=encode_path)
-    
-    res = {}
+def writeAllFaceEncodings(encoded, outName="known_faces"):
+    for person in encoded:
+        encodefolder = os.path.join(outName, person)
+        writeOneFaceEncoding(encoded, encodefolder, person)
 
-    for person in compknown:
-        temp = []
-        for el in inlist:
-            temp.extend(fr.compare_faces(compknown[person], el))
+def writeOneFaceEncoding(encoded, encodefolder, person):
+    encodefile = os.path.join(encodefolder, "encodings_"+person)
+    array = np.asarray(encoded[person])
 
-        if len(temp):
-            res[person] = temp.count(True) / len(temp)
-        else:
-            res[person] = None
-
-    return res
-
-# Turns images into the 128 feature list/vector
-def turnImagesToFeats(images):
-    res = []
-
-    for image in images:
-        # Find face encodings
-        face_encodings = fr.face_encodings(image)
-        index = 0
-
-        # Find the one with the most area (i.e. "biggest")
-        if len(face_encodings) > 1:
-            index = largestFaceIndex(image)
-                
-        # Append the biggest/only face encoding, if available
-        if len(face_encodings) > 0:
-            res.append(face_encodings[index])
-        
-    return res
+    if not os.path.isdir(encodefolder):
+        os.makedirs(encodefolder)
+    print(encodefile)
+    print(array.shape)
+    np.savez_compressed(encodefile, array)
 
 if __name__ == "__main__":
-    res = getFaceEncodings()
-    writeFaceEncodings(res)
-    # known = readFaceEncodings()
+    res = preloadedOrFreshEncodings()
+    writeAllFaceEncodings(res)
+    # known = preloadedOrFreshEncodings()
     # print(known["Ian"])
-    # print(compareListToKnown(known["Ian"], known))
+    # print(util.compareListToKnown(known["Ian"], known))

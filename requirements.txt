@@ -1,4 +1,4 @@
-wheel==0.33.6
+wheel==0.38.1
 numpy==1.17.4
 Pillow==6.2.1
 opencv-python==4.1.2.30
